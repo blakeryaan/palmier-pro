@@ -55,6 +55,12 @@ enum MainMenuBuilder {
         exportItem.keyEquivalentModifierMask = [.command]
         menu.addItem(exportItem)
 
+        menu.addItem(.separator())
+
+        let hotfItem = NSMenuItem(title: "HoTF Jobs…", action: #selector(AppDelegate.showHoTFJobs(_:)), keyEquivalent: "j")
+        hotfItem.keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(hotfItem)
+
         item.submenu = menu
         return item
     }

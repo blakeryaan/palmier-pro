@@ -36,6 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor
+    @objc func showHoTFJobs(_ sender: Any?) {
+        HoTFJobsWindowController.shared.show()
+    }
+
+    @MainActor
     @objc func showKeyboardShortcuts(_ sender: Any?) {
         HelpWindowController.shared.show(tab: .shortcuts)
     }

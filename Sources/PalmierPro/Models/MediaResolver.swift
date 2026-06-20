@@ -31,6 +31,14 @@ final class MediaResolver: @unchecked Sendable {
         return !FileManager.default.fileExists(atPath: url.path)
     }
 
+    /// Remote proxy/full-res URL stored on the manifest entry (`cachedRemoteURL`).
+    /// Used as a fallback when the local file hasn't been downloaded yet — e.g.
+    /// HoTF mailbox jobs carry the Reeve proxy here.
+    func remoteURL(for assetId: String) -> URL? {
+        guard let remote = entry(for: assetId)?.cachedRemoteURL else { return nil }
+        return URL(string: remote)
+    }
+
     func displayName(for assetId: String) -> String {
         entry(for: assetId)?.name ?? "Offline"
     }
