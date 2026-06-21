@@ -169,34 +169,9 @@ final class ExportService {
         format: ExportFormat,
         resolution: ExportResolution
     ) async throws -> AVAssetExportSession {
-        let timelineCanvas = CGSize(width: timeline.width, height: timeline.height)
-        let renderSize = resolution.renderSize(for: timelineCanvas)
-
-        let result = try await CompositionBuilder.build(
-            timeline: timeline,
-            resolveURL: { resolver.resolveURL(for: $0) },
-            renderSize: renderSize
+        try await ExportEngine.makeSession(
+            timeline: timeline, resolver: resolver, format: format, resolution: resolution
         )
-
-        let presetName = exportPresetName(format: format, resolution: resolution)
-        guard let session = AVAssetExportSession(asset: result.composition, presetName: presetName) else {
-            throw ExportError.unsupportedPreset
-        }
-        session.audioMix = result.audioMix
-
-        // Bake text clips into the export via AVVideoCompositionCoreAnimationTool
-        let (parent, videoLayer) = TextLayerController.buildForExport(
-            timeline: timeline,
-            fps: timeline.fps,
-            renderSize: renderSize
-        )
-        let mutableVC = result.videoComposition.mutableCopy() as! AVMutableVideoComposition
-        mutableVC.animationTool = AVVideoCompositionCoreAnimationTool(
-            postProcessingAsVideoLayer: videoLayer,
-            in: parent
-        )
-        session.videoComposition = mutableVC
-        return session
     }
 
     private static func detailedMessage(for error: Error) -> String {
@@ -212,28 +187,5 @@ final class ExportService {
             current = e.userInfo[NSUnderlyingErrorKey] as? NSError
         }
         return "\(message) (\(codes.joined(separator: " → ")))"
-    }
-
-    // MARK: - Export preset mapping
-
-    private func exportPresetName(format: ExportFormat, resolution: ExportResolution) -> String {
-        switch format {
-        case .h264:
-            switch resolution {
-            case .r720p: AVAssetExportPreset1280x720
-            case .r1080p: AVAssetExportPreset1920x1080
-            case .r4k: AVAssetExportPreset3840x2160
-            }
-        case .h265:
-            switch resolution {
-            case .r720p: AVAssetExportPresetHEVC1920x1080
-            case .r1080p: AVAssetExportPresetHEVC1920x1080
-            case .r4k: AVAssetExportPresetHEVC3840x2160
-            }
-        case .prores:
-            AVAssetExportPresetAppleProRes422LPCM
-        case .xml:
-            AVAssetExportPresetPassthrough // unreachable — XML returns early
-        }
     }
 }
