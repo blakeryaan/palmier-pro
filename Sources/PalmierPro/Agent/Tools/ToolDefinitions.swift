@@ -200,6 +200,8 @@ enum ToolDefinitions {
                     "fontSize": ["type": "number", "description": "Text clips only. Font size in canvas points."],
                     "color": ["type": "string", "description": "Text clips only. Hex '#RRGGBB' or '#RRGGBBAA'."],
                     "alignment": ["type": "string", "enum": ["left", "center", "right"], "description": "Text clips only."],
+                    "strokeWidth": ["type": "number", "description": "Text clips only. Per-glyph outline width as a percentage of font size (0 = none; ~6 reads as a thin outline). Pair with strokeColor."],
+                    "strokeColor": ["type": "string", "description": "Text clips only. Outline color, hex '#RRGGBB' or '#RRGGBBAA' (default black)."],
                 ],
                 required: ["clipIds"]
             )

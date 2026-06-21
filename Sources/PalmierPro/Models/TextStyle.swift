@@ -10,6 +10,9 @@ struct TextStyle: Codable, Sendable, Equatable {
     var shadow: Shadow = Shadow()
     var background: Fill = Fill(enabled: false, color: RGBA(r: 0, g: 0, b: 0, a: 0.6))
     var border: Fill = Fill(enabled: false, color: RGBA(r: 0, g: 0, b: 0, a: 1))
+    /// Per-glyph outline. 0 = none; value is stroke width as a percentage of font size (~6 reads as a thin outline).
+    var strokeWidth: Double = 0
+    var strokeColor: RGBA = RGBA(r: 0, g: 0, b: 0, a: 1)
 
     enum Alignment: String, Codable, Sendable, CaseIterable {
         case left
@@ -41,7 +44,7 @@ struct TextStyle: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case fontName, fontSize, fontScale, color, alignment, shadow, background, border
+        case fontName, fontSize, fontScale, color, alignment, shadow, background, border, strokeWidth, strokeColor
     }
 }
 
@@ -57,7 +60,9 @@ extension TextStyle {
             alignment: (try? c.decode(Alignment.self, forKey: .alignment)) ?? .center,
             shadow: (try? c.decode(Shadow.self, forKey: .shadow)) ?? Shadow(),
             background: (try? c.decode(Fill.self, forKey: .background)) ?? Fill(enabled: false, color: RGBA(r: 0, g: 0, b: 0, a: 0.6)),
-            border: (try? c.decode(Fill.self, forKey: .border)) ?? Fill(enabled: false, color: RGBA(r: 0, g: 0, b: 0, a: 1))
+            border: (try? c.decode(Fill.self, forKey: .border)) ?? Fill(enabled: false, color: RGBA(r: 0, g: 0, b: 0, a: 1)),
+            strokeWidth: (try? c.decode(Double.self, forKey: .strokeWidth)) ?? 0,
+            strokeColor: (try? c.decode(RGBA.self, forKey: .strokeColor)) ?? RGBA(r: 0, g: 0, b: 0, a: 1)
         )
     }
 }
@@ -140,7 +145,14 @@ extension TextStyle {
             .font: resolvedFont(size: size),
             .paragraphStyle: paragraphStyle,
         ]
-        if includeColor { attrs[.foregroundColor] = nsColor }
+        if includeColor {
+            attrs[.foregroundColor] = nsColor
+            if strokeWidth > 0 {
+                // Negative width = stroke + fill (positive would hollow the glyphs).
+                attrs[.strokeWidth] = -strokeWidth
+                attrs[.strokeColor] = strokeColor.nsColor
+            }
+        }
         return attrs
     }
 }

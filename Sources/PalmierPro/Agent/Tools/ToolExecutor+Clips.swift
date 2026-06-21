@@ -41,13 +41,15 @@ fileprivate struct SetClipPropertiesInput: DecodableToolArgs {
     let fontSize: Double?
     let color: String?
     let alignment: String?
+    let strokeWidth: Double?
+    let strokeColor: String?
 
     static let allowedKeys: Set<String> = [
         "clipIds",
         "durationFrames", "trimStartFrame", "trimEndFrame", "speed",
         "volume", "opacity",
         "transform",
-        "content", "fontName", "fontSize", "color", "alignment",
+        "content", "fontName", "fontSize", "color", "alignment", "strokeWidth", "strokeColor",
     ]
 
     var hasAnyProperty: Bool {
@@ -55,7 +57,7 @@ fileprivate struct SetClipPropertiesInput: DecodableToolArgs {
             || speed != nil || volume != nil || opacity != nil
             || transform != nil
             || content != nil || fontName != nil || fontSize != nil
-            || color != nil || alignment != nil
+            || color != nil || alignment != nil || strokeWidth != nil || strokeColor != nil
     }
 }
 
@@ -328,7 +330,7 @@ extension ToolExecutor {
 
     // MARK: set_clip_properties
 
-    private static let textOnlyKeys: Set<String> = ["content", "fontName", "fontSize", "color", "alignment"]
+    private static let textOnlyKeys: Set<String> = ["content", "fontName", "fontSize", "color", "alignment", "strokeWidth", "strokeColor"]
 
     func setClipProperties(_ editor: EditorViewModel, _ args: [String: Any]) throws -> ToolResult {
         let input: SetClipPropertiesInput = try decodeToolArgs(args, path: "set_clip_properties")
@@ -340,6 +342,7 @@ extension ToolExecutor {
             throw ToolError("durationFrames must be >= 1 (got \(df))")
         }
         let color = try parseColorHex(input.color, path: "set_clip_properties")
+        let strokeColor = try parseColorHex(input.strokeColor, path: "set_clip_properties")
         let alignment = try parseAlignment(input.alignment, path: "set_clip_properties")
 
         // Resolve clipIds + collect types so we can reject text-only fields on non-text clips.
@@ -354,6 +357,8 @@ extension ToolExecutor {
             input.fontSize  != nil ? "fontSize"  : nil,
             input.color     != nil ? "color"     : nil,
             input.alignment != nil ? "alignment" : nil,
+            input.strokeWidth != nil ? "strokeWidth" : nil,
+            input.strokeColor != nil ? "strokeColor" : nil,
         ].compactMap { $0 }
         if !textOnlyUsed.isEmpty {
             let nonText = clipTypes.filter { $0.value != .text }.map { $0.key }.sorted()
@@ -388,6 +393,8 @@ extension ToolExecutor {
                     fontSize: isText ? input.fontSize : nil,
                     color: isText ? color : nil,
                     alignment: isText ? alignment : nil,
+                    strokeWidth: isText ? input.strokeWidth : nil,
+                    strokeColor: isText ? strokeColor : nil,
                     clipId: id,
                     editor: editor
                 )
@@ -407,6 +414,7 @@ extension ToolExecutor {
                     speed:          partnerIsText ? nil : input.speed,
                     volume: nil, opacity: nil, transform: nil,
                     content: nil, fontName: nil, fontSize: nil, color: nil, alignment: nil,
+                    strokeWidth: nil, strokeColor: nil,
                     clipId: partnerId,
                     editor: editor
                 )
@@ -431,6 +439,8 @@ extension ToolExecutor {
         fontSize: Double?,
         color: TextStyle.RGBA?,
         alignment: TextStyle.Alignment?,
+        strokeWidth: Double?,
+        strokeColor: TextStyle.RGBA?,
         clipId: String,
         editor: EditorViewModel
     ) -> [String] {
@@ -460,13 +470,16 @@ extension ToolExecutor {
                 clip.transform = next
                 changed.append("transform")
             }
-            if content != nil || fontName != nil || fontSize != nil || color != nil || alignment != nil {
+            if content != nil || fontName != nil || fontSize != nil || color != nil || alignment != nil
+                || strokeWidth != nil || strokeColor != nil {
                 if let c = content { clip.textContent = c; changed.append("content") }
                 var style = clip.textStyle ?? TextStyle()
                 if let f = fontName  { style.fontName = f; changed.append("fontName") }
                 if let s = fontSize  { style.fontSize = s; changed.append("fontSize") }
                 if let c = color     { style.color = c; changed.append("color") }
                 if let a = alignment { style.alignment = a; changed.append("alignment") }
+                if let sw = strokeWidth { style.strokeWidth = sw; changed.append("strokeWidth") }
+                if let sc = strokeColor { style.strokeColor = sc; changed.append("strokeColor") }
                 clip.textStyle = style
             }
         }
