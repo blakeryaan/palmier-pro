@@ -27,7 +27,7 @@ final class HoTFMailbox {
     var templates: [HoTFTemplate] = []
     var formatTemplates: [HoTFCatalogTemplate] = []
     var savedTemplates: [HoTFSavedTemplate] = []
-    var renderQueue: [HoTFEditorJob] = []
+    var renderQueue: [HoTFQueueItem] = []
     var projects: [HoTFProject] = []
     var isWorking = false
     var lastError: String?
@@ -297,15 +297,15 @@ final class HoTFMailbox {
         }
     }
 
-    /// The Mode C render queue — the editor's own `editor_jobs`, most-recent
-    /// first. Pure Mode C (the editor only sends Mode C), and carries live
-    /// status + the Frame.io `output_url` once the agent box renders.
+    /// Reeve's Notion Render Queue (source of truth), most-recent first — the
+    /// shared view of everything the agent is producing. Filtered by date in the
+    /// UI so it's not a wall.
     func refreshRenderQueue() async {
         guard isTeam else { return }
         isWorking = true
         defer { isWorking = false }
         do {
-            let data = try await rest("editor_jobs?select=*&order=updated_at.desc&limit=100", method: "GET")
+            let data = try await rest("wb_render_queue?select=notion_id,name,status,last_edited&order=last_edited.desc.nullslast&limit=1000", method: "GET")
             renderQueue = Self.decodeLenient(data)
             lastError = nil
         } catch {

@@ -196,6 +196,8 @@ struct HoTFProjectsView: View {
                                                 .buttonStyle(.borderedProminent)
                                             Button("Send for Render") { send(project) }
                                                 .buttonStyle(.bordered)
+                                            Button("Promote to Template") { promote(project) }
+                                                .buttonStyle(.bordered)
                                         }
                                     }
                                 }
@@ -252,15 +254,58 @@ struct HoTFProjectsView: View {
     }
 
     private func openLocal(_ url: URL) async throws -> VideoProject {
-        try await withCheckedThrowingContinuation { continuation in
-            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { doc, _, error in
-                if let project = doc as? VideoProject {
-                    continuation.resume(returning: project)
+        // Reuse the window if it's already open.
+        if let existing = NSDocumentController.shared.document(for: url) as? VideoProject {
+            existing.showWindows()
+            return existing
+        }
+        // Open the package directly — NSDocumentController.openDocument can't
+        // resolve the .palmier package UTI under `swift run` (no Info.plist),
+        // which surfaces as "cannot open files in the folder format".
+        let doc = try VideoProject(contentsOf: url, ofType: VideoProject.typeIdentifier)
+        doc.makeWindowControllers()
+        doc.showWindows()
+        NSDocumentController.shared.addDocument(doc)
+        return doc
+    }
+
+    /// Save this project as a reusable Mode C template. Uses the live edited
+    /// template if the project is open, else its stored recipe template. Writes
+    /// to `editor_templates`; a Reeve sync promotes it into `mode_c_templates`
+    /// (the store the render machine reads).
+    private func promote(_ project: HoTFProject) {
+        guard let name = Self.promptForTemplateName(default: project.name ?? "Untitled Template") else { return }
+        busyId = project.id
+        Task {
+            defer { busyId = nil }
+            do {
+                let template: HoTFFormatTemplate
+                if let doc = HoTFOpenJobs.shared.doc(for: project.id) {
+                    await HoTFJobImporter.persist(doc)
+                    template = HoTFJobImporter.dialedRecipe(from: doc.editorViewModel, job: project.asEditorJob()).template
                 } else {
-                    continuation.resume(throwing: error ?? CocoaError(.fileReadUnknown))
+                    template = project.recipe.template
                 }
+                try await mailbox.saveAsTemplate(name: name, template: template, sourceProjectId: project.id)
+            } catch {
+                mailbox.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
         }
+    }
+
+    @MainActor
+    private static func promptForTemplateName(default defaultName: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = "Promote to Template"
+        alert.informativeText = "Save this project as a reusable Mode C template."
+        alert.addButton(withTitle: "Promote")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        field.stringValue = defaultName
+        alert.accessoryView = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
+        let trimmed = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func send(_ project: HoTFProject) {
@@ -287,29 +332,52 @@ struct HoTFProjectsView: View {
 
 struct HoTFRenderQueueView: View {
     @State private var mailbox = HoTFMailbox.shared
+    @State private var range: QueueRange = .week
+
+    enum QueueRange: String, CaseIterable, Identifiable {
+        case today = "Today", week = "This Week", all = "All"
+        var id: String { rawValue }
+        var days: Int? { self == .today ? 1 : self == .week ? 7 : nil }
+    }
+
+    private var filtered: [HoTFQueueItem] {
+        guard let days = range.days else { return mailbox.renderQueue }
+        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date.distantPast
+        return mailbox.renderQueue.filter { item in
+            guard let edited = item.lastEdited, let date = Self.parseDate(edited) else { return true }
+            return date >= cutoff
+        }
+    }
+
+    private static func parseDate(_ s: String) -> Date? {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f.date(from: String(s.prefix(10)))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
             if mailbox.isConnected && mailbox.isTeam {
-                WorkbenchHeader(title: "Render Queue", count: mailbox.renderQueue.count, isWorking: mailbox.isWorking) {
+                WorkbenchHeader(title: "Render Queue", count: filtered.count, isWorking: mailbox.isWorking) {
                     Task { await mailbox.refreshRenderQueue() }
                 }
-                if mailbox.renderQueue.isEmpty {
-                    Text("Nothing sent for render yet. Open a project, edit, then Send for Render.")
+                Picker("", selection: $range) {
+                    ForEach(QueueRange.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                if filtered.isEmpty {
+                    Text("Nothing in this range. Switch to All, or run the Reeve sync.")
                         .font(.system(size: AppTheme.FontSize.sm))
                         .foregroundStyle(AppTheme.Text.tertiaryColor)
                 } else {
                     ScrollView {
                         VStack(spacing: AppTheme.Spacing.sm) {
-                            ForEach(mailbox.renderQueue) { job in
-                                WorkbenchRowCard(title: job.name ?? "Untitled", subtitle: job.clientSlug) {
-                                    HStack(spacing: AppTheme.Spacing.sm) {
-                                        if let url = job.outputUrl, let link = URL(string: url) {
-                                            Link("Frame.io", destination: link)
-                                                .font(.system(size: AppTheme.FontSize.xs, weight: .medium))
-                                        }
-                                        StatusBadge(status: job.status)
-                                    }
+                            ForEach(filtered) { item in
+                                WorkbenchRowCard(title: item.name ?? "Untitled", subtitle: nil) {
+                                    StatusBadge(status: item.status)
                                 }
                             }
                         }

@@ -327,16 +327,18 @@ struct HoTFSavedTemplate: Codable, Equatable, Identifiable {
     }
 }
 
-/// One row of `wb_render_queue` / other workbench lists — generic catalog item.
+/// One row of `wb_render_queue` — the Reeve Notion Render Queue (source of truth).
 struct HoTFQueueItem: Codable, Equatable, Identifiable {
     var notionId: String
     var name: String?
     var status: String?
+    var lastEdited: String?
 
     var id: String { notionId }
 
     enum CodingKeys: String, CodingKey {
         case notionId = "notion_id"
         case name, status
+        case lastEdited = "last_edited"
     }
 }
