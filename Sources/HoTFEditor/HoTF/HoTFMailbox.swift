@@ -406,6 +406,18 @@ final class HoTFMailbox {
         _ = try await rest("editor_jobs?id=eq.\(job.id)", method: "PATCH", body: body, prefer: "return=minimal")
     }
 
+    /// Mode D save-back: write the full edited native timeline into `dialed` as a
+    /// `{kind:clip, timeline, fps, width, height}` recipe and mark the job
+    /// approved. Lossless — the worker decodes the timeline straight back.
+    func saveDialedClip(_ job: HoTFEditorJob, dialed: HoTFClipRecipe) async throws {
+        let dialedObject = try dialed.encodedRecipeObject()
+        let body = try JSONSerialization.data(withJSONObject: [
+            "status": "approved",
+            "dialed": dialedObject,
+        ])
+        _ = try await rest("editor_jobs?id=eq.\(job.id)", method: "PATCH", body: body, prefer: "return=minimal")
+    }
+
     // MARK: - REST plumbing
 
     /// URLSession with one retry on transient failures (a dropped keep-alive

@@ -199,8 +199,14 @@ struct HoTFJobsView: View {
         Task {
             defer { busyJobId = nil }
             do {
-                let dialed = HoTFJobImporter.dialedRecipe(from: doc.editorViewModel, job: job)
-                try await mailbox.saveDialed(job, dialed: dialed)
+                await HoTFJobImporter.persist(doc)
+                if job.isClipJob {
+                    let dialed = try HoTFJobImporter.dialedClipRecipe(from: doc.editorViewModel)
+                    try await mailbox.saveDialedClip(job, dialed: dialed)
+                } else {
+                    let dialed = HoTFJobImporter.dialedRecipe(from: doc.editorViewModel, job: job)
+                    try await mailbox.saveDialed(job, dialed: dialed)
+                }
                 await mailbox.refresh()
             } catch {
                 mailbox.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription

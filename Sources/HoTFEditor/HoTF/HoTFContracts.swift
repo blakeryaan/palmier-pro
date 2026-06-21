@@ -179,6 +179,64 @@ struct HoTFRecipe: Codable, Equatable {
     var template: HoTFFormatTemplate
     var resolution: HoTFSlotResolution
     var hookText: String
+
+    /// Empty stand-in so a Mode D clip job can keep the non-optional `recipe`
+    /// field without carrying a real Mode C recipe.
+    static let placeholder = HoTFRecipe(
+        template: HoTFFormatTemplate(
+            id: "", version: 0, name: "", formatKind: nil, sourceUrl: nil, durationSec: 0,
+            canvas: HoTFCanvas(width: 0, height: 0, fps: 0), segments: [],
+            audio: HoTFAudioPlan(primary: .silent), requiredAssetTags: [], vibeTags: [],
+            pacing: HoTFPacing(avgCutSec: 0, style: "")
+        ),
+        resolution: HoTFSlotResolution(brollSlots: [:], audioSlots: [:], literals: [:], assetRefs: nil),
+        hookText: ""
+    )
+}
+
+/// Which import path a job's `recipe`/`dialed` takes. Mode C recipes have no
+/// `kind` (or `kind:"modeC"`); a Mode D clip job has `kind:"clip"` and carries a
+/// full native editor timeline that opens losslessly.
+enum HoTFRecipeKind: Equatable { case modeC, clip }
+
+/// A Mode D clip recipe: `{ "kind":"clip", "timeline":<native Timeline JSON>,
+/// "fps":Int, "width":Int, "height":Int }`. `timelineData` is the editor's OWN
+/// serialized `Timeline` — byte-identical to what the `.hotf` package stores —
+/// so importing decodes it straight into the native `Timeline`, no field mapping.
+struct HoTFClipRecipe: Equatable {
+    var timelineData: Data
+    var fps: Int
+    var width: Int
+    var height: Int
+
+    /// Decode the carried native timeline. Same shape `HeadlessExport.loadProject`
+    /// and `VideoProject.read` consume.
+    func decodedTimeline() throws -> Timeline {
+        try JSONDecoder().decode(Timeline.self, from: timelineData)
+    }
+
+    /// Re-encode for write-back into `dialed`: `{kind:clip, timeline, fps, width, height}`.
+    func encodedRecipeObject() throws -> [String: Any] {
+        [
+            "kind": "clip",
+            "timeline": try JSONSerialization.jsonObject(with: timelineData),
+            "fps": fps,
+            "width": width,
+            "height": height,
+        ]
+    }
+
+    /// Decode from a raw recipe JSON object iff it is `kind:"clip"`. Returns nil
+    /// for Mode C recipes (no `kind`, or any other value).
+    static func from(rawRecipe object: Any?) -> HoTFClipRecipe? {
+        guard let dict = object as? [String: Any], dict["kind"] as? String == "clip" else { return nil }
+        guard let timeline = dict["timeline"], JSONSerialization.isValidJSONObject(timeline),
+              let timelineData = try? JSONSerialization.data(withJSONObject: timeline) else { return nil }
+        let fps = (dict["fps"] as? NSNumber)?.intValue ?? 30
+        let width = (dict["width"] as? NSNumber)?.intValue ?? 1920
+        let height = (dict["height"] as? NSNumber)?.intValue ?? 1080
+        return HoTFClipRecipe(timelineData: timelineData, fps: fps, width: width, height: height)
+    }
 }
 
 /// One `media_manifest` entry: same id, two files.
@@ -189,20 +247,70 @@ struct HoTFMediaManifestEntry: Codable, Equatable {
 
 typealias HoTFMediaManifestMap = [String: HoTFMediaManifestEntry]
 
+/// Decodes any JSON sub-tree into a Foundation `Any`, so we can peek at a
+/// recipe's `kind` discriminator before committing to a Mode C decode.
+private struct RawJSON: Decodable {
+    let value: Any
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let v = try? c.decode([String: RawJSON].self) { value = v.mapValues(\.value) }
+        else if let v = try? c.decode([RawJSON].self) { value = v.map(\.value) }
+        else if let v = try? c.decode(Bool.self) { value = v }
+        else if let v = try? c.decode(Int.self) { value = v }
+        else if let v = try? c.decode(Double.self) { value = v }
+        else if let v = try? c.decode(String.self) { value = v }
+        else { value = NSNull() }
+    }
+}
+
 /// One row of `editor_jobs`.
-struct HoTFEditorJob: Codable, Equatable, Identifiable {
+struct HoTFEditorJob: Equatable, Identifiable {
     var id: String
     var clientId: String?
     var clientSlug: String?
     var name: String?
     var status: String
+    /// Mode C recipe. For a Mode D clip job this is `HoTFRecipe.placeholder`.
     var recipe: HoTFRecipe
     var mediaManifest: HoTFMediaManifestMap?
+    /// Mode C dialed recipe. Nil for clip jobs (see `dialedClipRecipe`).
     var dialed: HoTFRecipe?
     var outputUrl: String?
     var notionRenderPageId: String?
     var claimedBy: String?
     var createdAt: String?
+
+    /// `.clip` when `recipe.kind == "clip"`, else `.modeC`.
+    var recipeKind: HoTFRecipeKind = .modeC
+    /// The Mode D clip payload (native timeline + dims), present iff `recipeKind == .clip`.
+    var clipRecipe: HoTFClipRecipe?
+    /// The dialed clip payload, when a clip job was already dialed.
+    var dialedClipRecipe: HoTFClipRecipe?
+
+    var isClipJob: Bool { recipeKind == .clip }
+
+    init(
+        id: String, clientId: String?, clientSlug: String?, name: String?, status: String,
+        recipe: HoTFRecipe, mediaManifest: HoTFMediaManifestMap?, dialed: HoTFRecipe?,
+        outputUrl: String?, notionRenderPageId: String?, claimedBy: String?, createdAt: String?,
+        recipeKind: HoTFRecipeKind = .modeC, clipRecipe: HoTFClipRecipe? = nil, dialedClipRecipe: HoTFClipRecipe? = nil
+    ) {
+        self.id = id
+        self.clientId = clientId
+        self.clientSlug = clientSlug
+        self.name = name
+        self.status = status
+        self.recipe = recipe
+        self.mediaManifest = mediaManifest
+        self.dialed = dialed
+        self.outputUrl = outputUrl
+        self.notionRenderPageId = notionRenderPageId
+        self.claimedBy = claimedBy
+        self.createdAt = createdAt
+        self.recipeKind = recipeKind
+        self.clipRecipe = clipRecipe
+        self.dialedClipRecipe = dialedClipRecipe
+    }
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -219,8 +327,49 @@ struct HoTFEditorJob: Codable, Equatable, Identifiable {
         case createdAt = "created_at"
     }
 
-    /// The recipe to dial: the human-dialed one if present, else the original.
+    /// The Mode C recipe to dial: the human-dialed one if present, else the original.
     var workingRecipe: HoTFRecipe { dialed ?? recipe }
+
+    /// The Mode D clip recipe to render: dialed clip if present, else the original.
+    var workingClipRecipe: HoTFClipRecipe? { dialedClipRecipe ?? clipRecipe }
+}
+
+extension HoTFEditorJob: Decodable {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let rawRecipe = (try? c.decode(RawJSON.self, forKey: .recipe))?.value
+        let rawDialed = (try? c.decode(RawJSON.self, forKey: .dialed))?.value
+
+        let clip = HoTFClipRecipe.from(rawRecipe: rawRecipe)
+        let dialedClip = HoTFClipRecipe.from(rawRecipe: rawDialed)
+
+        // Mode C decodes the typed recipe; a clip job keeps the placeholder so the
+        // non-optional field stays valid and Mode C call sites still compile.
+        let recipe: HoTFRecipe = clip != nil
+            ? .placeholder
+            : try c.decode(HoTFRecipe.self, forKey: .recipe)
+        let dialed: HoTFRecipe? = (clip != nil || dialedClip != nil)
+            ? nil
+            : (try? c.decode(HoTFRecipe.self, forKey: .dialed))
+
+        self.init(
+            id: try c.decode(String.self, forKey: .id),
+            clientId: try? c.decode(String.self, forKey: .clientId),
+            clientSlug: try? c.decode(String.self, forKey: .clientSlug),
+            name: try? c.decode(String.self, forKey: .name),
+            status: (try? c.decode(String.self, forKey: .status)) ?? "open",
+            recipe: recipe,
+            mediaManifest: try? c.decode(HoTFMediaManifestMap.self, forKey: .mediaManifest),
+            dialed: dialed,
+            outputUrl: try? c.decode(String.self, forKey: .outputUrl),
+            notionRenderPageId: try? c.decode(String.self, forKey: .notionRenderPageId),
+            claimedBy: try? c.decode(String.self, forKey: .claimedBy),
+            createdAt: try? c.decode(String.self, forKey: .createdAt),
+            recipeKind: clip != nil ? .clip : .modeC,
+            clipRecipe: clip,
+            dialedClipRecipe: dialedClip
+        )
+    }
 }
 
 /// One row of `templates` — the format library the editor browses for manual

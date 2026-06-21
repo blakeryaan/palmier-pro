@@ -33,6 +33,9 @@ enum HoTFJobImporter {
 
     @discardableResult
     private static func build(_ job: HoTFEditorJob, show: Bool) async throws -> (doc: VideoProject, url: URL) {
+        if let clip = job.workingClipRecipe {
+            return try await buildClip(job, clip: clip, show: show)
+        }
         let recipe = job.workingRecipe
         let doc = VideoProject()
         let url = uniqueProjectURL(named: job.name ?? recipe.hookText)
@@ -65,6 +68,60 @@ enum HoTFJobImporter {
 
         try await save(doc, to: url)
         return (doc, url)
+    }
+
+    // MARK: - Mode D clip build (lossless native timeline)
+
+    /// Open a Mode D clip job: decode the carried native `Timeline` straight into
+    /// the project (no recipe→timeline mapping, no loss), then resolve its media
+    /// from `media_manifest` exactly like the Mode C path (Drive rewrite, caching).
+    @discardableResult
+    private static func buildClip(_ job: HoTFEditorJob, clip: HoTFClipRecipe, show: Bool) async throws -> (doc: VideoProject, url: URL) {
+        let timeline = try clip.decodedTimeline()
+        let doc = VideoProject()
+        let url = uniqueProjectURL(named: job.name ?? "Clip Job")
+        doc.fileURL = url
+        doc.fileType = VideoProject.typeIdentifier
+        if show {
+            doc.makeWindowControllers()
+            doc.showWindows()
+            NSDocumentController.shared.addDocument(doc)
+        }
+        try await save(doc, to: url)
+
+        let editor = doc.editorViewModel
+        editor.projectURL = url
+
+        let mediaDir = url.appendingPathComponent(Project.mediaDirectoryName, isDirectory: true)
+        try? FileManager.default.createDirectory(at: mediaDir, withIntermediateDirectories: true)
+
+        for slot in collectClipMediaSlots(timeline: timeline, manifest: job.mediaManifest ?? [:]) {
+            await materialize(slot, into: mediaDir, editor: editor, projectURL: url)
+        }
+
+        // Apply the native timeline verbatim — this is the lossless round-trip.
+        editor.timeline = timeline
+        editor.seedGenerationLogFromAssets()
+
+        try await save(doc, to: url)
+        return (doc, url)
+    }
+
+    /// Every distinct `mediaRef` across the native timeline, paired with its
+    /// manifest proxy (or full-res) URL. Text clips (empty mediaRef) are skipped.
+    private static func collectClipMediaSlots(timeline: Timeline, manifest: HoTFMediaManifestMap) -> [MediaSlot] {
+        var seen = Set<String>()
+        var slots: [MediaSlot] = []
+        for track in timeline.tracks {
+            for clip in track.clips where !clip.mediaRef.isEmpty {
+                guard !seen.contains(clip.mediaRef) else { continue }
+                seen.insert(clip.mediaRef)
+                let proxy = manifest[clip.mediaRef]?.proxyUrl ?? manifest[clip.mediaRef]?.fullResUrl
+                let type: ClipType = clip.mediaType == .text ? .video : clip.mediaType
+                slots.append(MediaSlot(assetId: clip.mediaRef, proxyURL: proxy, type: type, name: clip.mediaRef))
+            }
+        }
+        return slots
     }
 
     // MARK: - Media collection
@@ -264,6 +321,21 @@ enum HoTFJobImporter {
         guard let url = doc.fileURL else { return }
         doc.updateChangeCount(.changeDone)
         try? await save(doc, to: url)
+    }
+
+    /// Lossless Mode D save-back: serialize the live edited native `Timeline`
+    /// into a clip recipe `{kind:clip, timeline, fps, width, height}` — the same
+    /// JSON the `.hotf` package stores — for write-back to `dialed`. No mapping,
+    /// no loss; does NOT route through `dialedRecipe()`.
+    static func dialedClipRecipe(from editor: EditorViewModel) throws -> HoTFClipRecipe {
+        let timeline = editor.timeline
+        let timelineData = try JSONEncoder().encode(timeline)
+        return HoTFClipRecipe(
+            timelineData: timelineData,
+            fps: max(1, timeline.fps),
+            width: timeline.width,
+            height: timeline.height
+        )
     }
 
     static func dialedRecipe(from editor: EditorViewModel, job: HoTFEditorJob) -> HoTFRecipe {

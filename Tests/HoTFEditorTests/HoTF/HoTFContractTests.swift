@@ -113,4 +113,127 @@ struct HoTFContractTests {
             #expect(slotId == "vo")
         } else { Issue.record("audio primary should be voiceover_slot") }
     }
+
+    @Test func modeCJobReportsModeCKind() throws {
+        let job = try decodedJob()
+        #expect(job.recipeKind == .modeC)
+        #expect(job.isClipJob == false)
+        #expect(job.clipRecipe == nil)
+        #expect(job.workingClipRecipe == nil)
+    }
+
+    // MARK: - Mode D clip jobs
+
+    /// A `kind:"clip"` row carrying a full native editor `Timeline` (the same JSON
+    /// the `.hotf` package stores). Two video clips + one text clip + an audio
+    /// clip, with a keyframe track to prove rich edits survive losslessly.
+    static func clipRowJSON(timelineJSON: String) -> String {
+        """
+        {
+          "id": "aaaa1111-bbbb-2222-cccc-333344445555",
+          "client_slug": "blake",
+          "name": "Clip job test",
+          "status": "ready",
+          "media_manifest": {
+            "asset-a": { "proxyUrl": "https://example.com/a-proxy.mp4", "fullResUrl": "https://example.com/a.mp4" },
+            "asset-b": { "proxyUrl": "https://example.com/b-proxy.mp4", "fullResUrl": "https://example.com/b.mp4" },
+            "vo-1": { "proxyUrl": "https://example.com/vo-proxy.mp3", "fullResUrl": "https://example.com/vo.mp3" }
+          },
+          "recipe": {
+            "kind": "clip",
+            "fps": 30,
+            "width": 1080,
+            "height": 1920,
+            "timeline": \(timelineJSON)
+          }
+        }
+        """
+    }
+
+    /// Build a real editor timeline, serialize it exactly as the project package
+    /// would, and embed it as the clip recipe's `timeline`.
+    static func sampleTimeline() -> Timeline {
+        var timeline = Timeline()
+        timeline.fps = 30
+        timeline.width = 1080
+        timeline.height = 1920
+        timeline.settingsConfigured = true
+
+        var a = Clip(mediaRef: "asset-a", startFrame: 0, durationFrames: 60)
+        a.mediaType = .video
+        a.trimStartFrame = 15
+        a.speed = 1.5
+        a.upsertKeyframe(in: \.scaleTrack, frame: 0, value: AnimPair(a: 1.0, b: 1.0))
+        a.upsertKeyframe(in: \.scaleTrack, frame: 30, value: AnimPair(a: 1.2, b: 1.2))
+
+        var b = Clip(mediaRef: "asset-b", startFrame: 60, durationFrames: 45)
+        b.mediaType = .video
+
+        var text = Clip(mediaRef: "", startFrame: 0, durationFrames: 40)
+        text.mediaType = .text
+        text.sourceClipType = .text
+        text.textContent = "I quit my job at 18"
+        text.textStyle = TextStyle()
+
+        var audio = Clip(mediaRef: "vo-1", startFrame: 0, durationFrames: 105)
+        audio.mediaType = .audio
+
+        timeline.tracks = [
+            Track(type: .video, clips: [a, b]),
+            Track(type: .text, clips: [text]),
+            Track(type: .audio, clips: [audio]),
+        ]
+        return timeline
+    }
+
+    @Test func decodesClipJobWithNativeTimeline() throws {
+        let timeline = Self.sampleTimeline()
+        let timelineJSON = String(decoding: try JSONEncoder().encode(timeline), as: UTF8.self)
+        let job = try JSONDecoder().decode(
+            HoTFEditorJob.self, from: Data(Self.clipRowJSON(timelineJSON: timelineJSON).utf8)
+        )
+
+        #expect(job.recipeKind == .clip)
+        #expect(job.isClipJob)
+        #expect(job.status == "ready")
+        #expect(job.mediaManifest?["asset-a"]?.proxyUrl == "https://example.com/a-proxy.mp4")
+
+        let clip = try #require(job.workingClipRecipe)
+        #expect(clip.fps == 30)
+        #expect(clip.width == 1080)
+        #expect(clip.height == 1920)
+
+        // The carried timeline decodes straight back into the native model.
+        let decoded = try clip.decodedTimeline()
+        #expect(decoded == timeline)
+    }
+
+    @Test func clipTimelineRoundTripsLosslessly() throws {
+        // open (decode) → edit-in-place → dialed (re-encode) must preserve the
+        // exact native timeline, including keyframe tracks and trims.
+        let original = Self.sampleTimeline()
+        let timelineJSON = String(decoding: try JSONEncoder().encode(original), as: UTF8.self)
+        let job = try JSONDecoder().decode(
+            HoTFEditorJob.self, from: Data(Self.clipRowJSON(timelineJSON: timelineJSON).utf8)
+        )
+        let clip = try #require(job.clipRecipe)
+        let reopened = try clip.decodedTimeline()
+        #expect(reopened == original)
+
+        // Encode the dialed clip recipe object and decode it back as a clip job.
+        let dialed = HoTFClipRecipe(
+            timelineData: try JSONEncoder().encode(reopened),
+            fps: reopened.fps, width: reopened.width, height: reopened.height
+        )
+        let dialedObject = try dialed.encodedRecipeObject()
+        #expect(dialedObject["kind"] as? String == "clip")
+        let row: [String: Any] = [
+            "id": "x", "status": "approved", "dialed": dialedObject,
+            "recipe": dialedObject,
+        ]
+        let rowData = try JSONSerialization.data(withJSONObject: row)
+        let again = try JSONDecoder().decode(HoTFEditorJob.self, from: rowData)
+        let againClip = try #require(again.workingClipRecipe)
+        #expect(try againClip.decodedTimeline() == original)
+    }
 }
