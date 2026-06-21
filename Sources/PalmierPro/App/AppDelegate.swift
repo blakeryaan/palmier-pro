@@ -17,6 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppNotifications.configure()
 
         AppState.shared.startMCPService()
+
+        // Restore the HoTF session so the Home "Jobs" panel lands signed-in.
+        Task { @MainActor in
+            await HoTFMailbox.shared.restore()
+        }
     }
 
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {

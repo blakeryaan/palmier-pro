@@ -21,14 +21,28 @@ enum HoTFJobImporter {
     }
 
     static func open(_ job: HoTFEditorJob) async throws {
+        _ = try await build(job, show: true)
+    }
+
+    /// Headless variant for prefetch — downloads media + writes the project
+    /// package without opening a window. Returns the project URL so it can be
+    /// cached and opened instantly later.
+    static func prepare(_ job: HoTFEditorJob) async throws -> URL {
+        try await build(job, show: false).url
+    }
+
+    @discardableResult
+    private static func build(_ job: HoTFEditorJob, show: Bool) async throws -> (doc: VideoProject, url: URL) {
         let recipe = job.workingRecipe
         let doc = VideoProject()
         let url = uniqueProjectURL(named: job.name ?? recipe.hookText)
         doc.fileURL = url
         doc.fileType = VideoProject.typeIdentifier
-        doc.makeWindowControllers()
-        doc.showWindows()
-        NSDocumentController.shared.addDocument(doc)
+        if show {
+            doc.makeWindowControllers()
+            doc.showWindows()
+            NSDocumentController.shared.addDocument(doc)
+        }
         try await save(doc, to: url)
 
         let editor = doc.editorViewModel
@@ -50,6 +64,7 @@ enum HoTFJobImporter {
         editor.seedGenerationLogFromAssets()
 
         try await save(doc, to: url)
+        return (doc, url)
     }
 
     // MARK: - Media collection
@@ -95,7 +110,7 @@ enum HoTFJobImporter {
         let destURL = mediaDir.appendingPathComponent("\(safeFilename(slot.assetId)).\(ext)")
 
         var downloaded = false
-        if let proxy = slot.proxyURL, let remote = URL(string: proxy), remote.scheme?.hasPrefix("http") == true {
+        if let proxy = slot.proxyURL, let remote = downloadableURL(proxy), remote.scheme?.hasPrefix("http") == true {
             downloaded = await download(remote, to: destURL)
         }
 
@@ -136,11 +151,38 @@ enum HoTFJobImporter {
         }
     }
 
+    /// Google Drive `/file/d/<id>/view` and `open?id=` links serve an HTML
+    /// preview page, not the file. Rewrite them to the direct-download endpoint
+    /// so the proxy actually lands as media. Non-Drive URLs pass through.
+    private static func downloadableURL(_ urlString: String) -> URL? {
+        guard let id = driveFileId(urlString) else { return URL(string: urlString) }
+        return URL(string: "https://drive.google.com/uc?export=download&id=\(id)&confirm=t")
+    }
+
+    private static func driveFileId(_ urlString: String) -> String? {
+        guard urlString.contains("drive.google.com") || urlString.contains("docs.google.com") else { return nil }
+        if let range = urlString.range(of: "/d/") {
+            let id = urlString[range.upperBound...].prefix { $0 != "/" && $0 != "?" && $0 != "&" }
+            if !id.isEmpty { return String(id) }
+        }
+        if let items = URLComponents(string: urlString)?.queryItems,
+           let id = items.first(where: { $0.name == "id" })?.value, !id.isEmpty {
+            return id
+        }
+        return nil
+    }
+
     private static func download(_ remote: URL, to dest: URL) async -> Bool {
         do {
             let (tmp, response) = try await URLSession.shared.download(from: remote)
             if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                 try? FileManager.default.removeItem(at: tmp)
+                return false
+            }
+            // A Drive virus-scan interstitial comes back as HTML, not media.
+            if (response.mimeType ?? "").contains("html") {
+                try? FileManager.default.removeItem(at: tmp)
+                Log.project.error("HoTF proxy is an HTML page, not media: \(remote.absoluteString)")
                 return false
             }
             try? FileManager.default.removeItem(at: dest)
@@ -214,6 +256,15 @@ enum HoTFJobImporter {
     }
 
     // MARK: - Save-back
+
+    /// Force-persist the project package (timeline + manifest) to disk — used
+    /// before Send for Render so the local .palmier always reflects the edit,
+    /// even for edits that didn't route through the undo manager.
+    static func persist(_ doc: VideoProject) async {
+        guard let url = doc.fileURL else { return }
+        doc.updateChangeCount(.changeDone)
+        try? await save(doc, to: url)
+    }
 
     static func dialedRecipe(from editor: EditorViewModel, job: HoTFEditorJob) -> HoTFRecipe {
         var recipe = job.workingRecipe

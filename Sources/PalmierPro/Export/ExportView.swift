@@ -27,6 +27,10 @@ struct ExportView: View {
     @State private var preview: NSImage?
     @State private var palmierResult: String?
     @State private var palmierSummary: (collect: Int, missing: Int, bytes: Int64) = (0, 0, 0)
+    @State private var isSendingToAgent = false
+    @State private var agentSendStatus: String?
+    @State private var showSaveTemplate = false
+    @State private var templateName = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -229,8 +233,37 @@ struct ExportView: View {
 
             Spacer()
 
+            if let status = agentSendStatus {
+                Text(status)
+                    .font(.system(size: AppTheme.FontSize.xs))
+                    .foregroundStyle(AppTheme.Text.mutedColor)
+                    .lineLimit(1)
+            }
+
             Button("Cancel") { editor.showExportDialog = false }
                 .keyboardShortcut(.cancelAction)
+
+            if let project = HoTFOpenJobs.shared.project(forPath: editor.projectURL?.path) {
+                Button("Save as Template") {
+                    templateName = project.templateName ?? project.name ?? "Untitled Template"
+                    showSaveTemplate = true
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .alert("Save as Template", isPresented: $showSaveTemplate) {
+                    TextField("Template name", text: $templateName)
+                    Button("Cancel", role: .cancel) {}
+                    Button("Save") { saveTemplate(project) }
+                } message: {
+                    Text("Saves this edited structure as a reusable Mode C template.")
+                }
+
+                Button(isSendingToAgent ? "Sending…" : "Send to Agent Render") { sendToAgent(project) }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                    .disabled(isSendingToAgent || service.isExporting)
+            }
+
             Button("Export") { startExport() }
                 .buttonStyle(.glassProminent)
                 .buttonBorderShape(.capsule)
@@ -239,6 +272,39 @@ struct ExportView: View {
         }
         .padding(.horizontal, AppTheme.Spacing.xl)
         .padding(.vertical, AppTheme.Spacing.lg)
+    }
+
+    private func saveTemplate(_ project: HoTFProject) {
+        let name = templateName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        Task {
+            let template = HoTFJobImporter.dialedRecipe(from: editor, job: project.asEditorJob()).template
+            do {
+                try await HoTFMailbox.shared.saveAsTemplate(name: name, template: template, sourceProjectId: project.id)
+                agentSendStatus = "Saved template “\(name)”"
+            } catch {
+                agentSendStatus = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func sendToAgent(_ project: HoTFProject) {
+        isSendingToAgent = true
+        agentSendStatus = nil
+        Task {
+            defer { isSendingToAgent = false }
+            if let doc = HoTFOpenJobs.shared.doc(for: project.id) {
+                await HoTFJobImporter.persist(doc)
+            }
+            let dialed = HoTFJobImporter.dialedRecipe(from: editor, job: project.asEditorJob())
+            do {
+                try await HoTFMailbox.shared.sendProjectForRender(project, dialed: dialed)
+                await HoTFMailbox.shared.refreshRenderQueue()
+                editor.showExportDialog = false
+            } catch {
+                agentSendStatus = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+        }
     }
 
     // MARK: - Helpers

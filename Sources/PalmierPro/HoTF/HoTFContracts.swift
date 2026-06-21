@@ -164,7 +164,7 @@ struct HoTFFormatTemplate: Codable, Equatable {
     var version: Int
     var name: String
     var formatKind: String?
-    var sourceUrl: String
+    var sourceUrl: String?
     var durationSec: Double
     var canvas: HoTFCanvas
     var segments: [HoTFSegment]
@@ -221,4 +221,122 @@ struct HoTFEditorJob: Codable, Equatable, Identifiable {
 
     /// The recipe to dial: the human-dialed one if present, else the original.
     var workingRecipe: HoTFRecipe { dialed ?? recipe }
+}
+
+/// One row of `templates` — the format library the editor browses for manual
+/// edits. Carries a full recipe so it opens straight into a timeline.
+struct HoTFTemplate: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String
+    var clientSlug: String?
+    var formatKind: String?
+    var segmentCount: Int?
+    var durationSec: Double?
+    var recipe: HoTFRecipe
+    var mediaManifest: HoTFMediaManifestMap?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name
+        case clientSlug = "client_slug"
+        case formatKind = "format_kind"
+        case segmentCount = "segment_count"
+        case durationSec = "duration_sec"
+        case recipe
+        case mediaManifest = "media_manifest"
+    }
+}
+
+// MARK: - Workbench mirror (Reeve Notion DBs, synced into Supabase)
+
+/// One row of `wb_format_templates` — the Reeve "Format Templates" catalog.
+struct HoTFCatalogTemplate: Codable, Equatable, Identifiable {
+    var notionId: String
+    var name: String?
+    var status: String?
+    var props: Props?
+
+    var id: String { notionId }
+
+    struct Props: Codable, Equatable {
+        var durationSec: Double?
+        var segmentCount: Double?
+        var vibeTags: [String]?
+        var sourceUrl: String?
+        var templateJsonPath: String?
+
+        enum CodingKeys: String, CodingKey {
+            case durationSec = "Duration Sec"
+            case segmentCount = "Segment Count"
+            case vibeTags = "Vibe Tags"
+            case sourceUrl = "Source URL"
+            case templateJsonPath = "Template JSON Path"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case notionId = "notion_id"
+        case name, status, props
+    }
+}
+
+/// One row of `wb_projects` — an editable instance (a Reeve variation). Carries
+/// the full recipe so it opens straight into a timeline; Send for Render pushes
+/// it onto the queue (editor_jobs).
+struct HoTFProject: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String?
+    var clientSlug: String?
+    var status: String?
+    var templateName: String?
+    var segmentCount: Int?
+    var recipe: HoTFRecipe
+    var mediaManifest: HoTFMediaManifestMap?
+    var thumbnailUrl: String?
+    var outputUrl: String?
+
+    /// Synthesize the editor-job shape the importer/dial helpers expect.
+    func asEditorJob() -> HoTFEditorJob {
+        HoTFEditorJob(
+            id: id, clientId: nil, clientSlug: clientSlug, name: name,
+            status: status ?? "open", recipe: recipe, mediaManifest: mediaManifest,
+            dialed: nil, outputUrl: outputUrl, notionRenderPageId: nil,
+            claimedBy: nil, createdAt: nil
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, status, recipe
+        case clientSlug = "client_slug"
+        case templateName = "template_name"
+        case segmentCount = "segment_count"
+        case mediaManifest = "media_manifest"
+        case thumbnailUrl = "thumbnail_url"
+        case outputUrl = "output_url"
+    }
+}
+
+/// One row of `editor_templates` — a template saved/refined from the editor.
+struct HoTFSavedTemplate: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String
+    var sourceProjectId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case sourceProjectId = "source_project_id"
+    }
+}
+
+/// One row of `wb_render_queue` / other workbench lists — generic catalog item.
+struct HoTFQueueItem: Codable, Equatable, Identifiable {
+    var notionId: String
+    var name: String?
+    var status: String?
+
+    var id: String { notionId }
+
+    enum CodingKeys: String, CodingKey {
+        case notionId = "notion_id"
+        case name, status
+    }
 }

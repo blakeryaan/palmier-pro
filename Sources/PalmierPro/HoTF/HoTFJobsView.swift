@@ -8,25 +8,42 @@ final class HoTFOpenJobs {
     static let shared = HoTFOpenJobs()
     private final class WeakDoc { weak var value: VideoProject?; init(_ v: VideoProject) { value = v } }
     private var docs: [String: WeakDoc] = [:]
+    private var projectsByPath: [String: HoTFProject] = [:]
 
     func register(_ jobId: String, doc: VideoProject) { docs[jobId] = WeakDoc(doc) }
     func doc(for jobId: String) -> VideoProject? { docs[jobId]?.value }
+
+    /// Track an opened HoTF project so the editor's Export sheet can offer
+    /// "Send to Agent Render" for it (keyed by the project document's path).
+    func registerProject(_ project: HoTFProject, doc: VideoProject) {
+        docs[project.id] = WeakDoc(doc)
+        if let path = doc.fileURL?.path { projectsByPath[path] = project }
+    }
+
+    func project(forPath path: String?) -> HoTFProject? {
+        guard let path else { return nil }
+        return projectsByPath[path]
+    }
 }
 
 struct HoTFJobsView: View {
+    /// When embedded in the Home window the account/sign-out live in the sidebar
+    /// footer, so this panel drops the standalone-window chrome.
+    var embedded = false
+
     @State private var mailbox = HoTFMailbox.shared
-    @State private var portalURL = HoTFConfig.portalBaseURL
-    @State private var supabaseURL = HoTFConfig.supabaseURL
-    @State private var serviceKey = HoTFConfig.supabaseServiceKey
-    @State private var accessToken = HoTFConfig.accessToken
+    @State private var email = ""
+    @State private var password = ""
     @State private var busyJobId: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.lg) {
             header
             if mailbox.isConnected && mailbox.isTeam {
-                connectedBar
-                Divider().opacity(AppTheme.Opacity.muted)
+                if !embedded {
+                    connectedBar
+                    Divider().opacity(AppTheme.Opacity.muted)
+                }
                 jobsList
             } else {
                 connectForm
@@ -39,17 +56,22 @@ struct HoTFJobsView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(AppTheme.Spacing.xl)
-        .frame(minWidth: 520, minHeight: 460, alignment: .topLeading)
+        .padding(embedded ? AppTheme.Spacing.xlXxl : AppTheme.Spacing.xl)
+        .frame(maxWidth: embedded ? .infinity : nil, maxHeight: embedded ? .infinity : nil, alignment: .topLeading)
+        .frame(minWidth: embedded ? nil : 520, minHeight: embedded ? nil : 460, alignment: .topLeading)
     }
 
     private var header: some View {
-        HStack {
-            Text("HoTF Jobs")
-                .font(.system(size: AppTheme.FontSize.lg, weight: .semibold))
+        HStack(spacing: AppTheme.Spacing.md) {
+            Text(embedded ? "Jobs" : "HoTF Jobs")
+                .font(.system(size: embedded ? AppTheme.FontSize.xl : AppTheme.FontSize.lg, weight: .semibold))
                 .foregroundStyle(AppTheme.Text.primaryColor)
-            Spacer()
             if mailbox.isWorking { ProgressView().controlSize(.small) }
+            Spacer()
+            if embedded && mailbox.isConnected && mailbox.isTeam {
+                Button("Refresh") { Task { await mailbox.refresh() } }
+                    .buttonStyle(.bordered)
+            }
         }
     }
 
@@ -57,25 +79,24 @@ struct HoTFJobsView: View {
 
     private var connectForm: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            Text("Connect to the HoTF mailbox. Paste your HoTF access token and the portal Supabase service key.")
+            Text("Sign in with your HoTF account.")
                 .font(.system(size: AppTheme.FontSize.sm))
                 .foregroundStyle(AppTheme.Text.secondaryColor)
                 .fixedSize(horizontal: false, vertical: true)
 
-            field("Portal URL", text: $portalURL) { HoTFConfig.portalBaseURL = $0 }
-            field("Supabase URL", text: $supabaseURL) { HoTFConfig.supabaseURL = $0 }
-            secureField("Supabase service key", text: $serviceKey) { HoTFConfig.supabaseServiceKey = $0 }
-            secureField("HoTF access token", text: $accessToken) { HoTFConfig.accessToken = $0 }
+            field("Email", text: $email) { _ in }
+            secureField("Password", text: $password) { _ in }
 
-            Button("Connect") {
-                HoTFConfig.portalBaseURL = portalURL
-                HoTFConfig.supabaseURL = supabaseURL
-                HoTFConfig.supabaseServiceKey = serviceKey
-                HoTFConfig.accessToken = accessToken
-                Task { await mailbox.connect() }
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(mailbox.isWorking)
+            Button("Sign in") { signIn() }
+                .buttonStyle(.borderedProminent)
+                .disabled(mailbox.isWorking || email.isEmpty || password.isEmpty)
+        }
+    }
+
+    private func signIn() {
+        Task {
+            await mailbox.signIn(email: email, password: password)
+            if mailbox.isConnected { password = "" }
         }
     }
 
@@ -90,7 +111,7 @@ struct HoTFJobsView: View {
             Spacer()
             Button("Refresh") { Task { await mailbox.refresh() } }
                 .buttonStyle(.bordered)
-            Button("Disconnect") { mailbox.disconnect() }
+            Button("Sign Out") { mailbox.signOut() }
                 .buttonStyle(.bordered)
         }
     }
@@ -137,7 +158,7 @@ struct HoTFJobsView: View {
                 .buttonStyle(.borderedProminent)
 
                 if job.status == "open" {
-                    Button("Approve & Send") { approve(job) }
+                    Button("Send for Render") { approve(job) }
                         .buttonStyle(.bordered)
                 }
             }
@@ -209,6 +230,61 @@ struct HoTFJobsView: View {
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: text.wrappedValue) { _, value in onCommit(value) }
         }
+    }
+}
+
+// MARK: - Sidebar account footer
+
+/// The signed-in HoTF account, shown at the bottom of the Home sidebar with an
+/// easy sign-out. When signed out it's a "Sign in" row that opens the Jobs panel.
+struct HoTFAccountFooter: View {
+    @State private var mailbox = HoTFMailbox.shared
+    var onSignInTap: () -> Void
+
+    var body: some View {
+        if let account = mailbox.account {
+            HStack(spacing: AppTheme.Spacing.smMd) {
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: AppTheme.IconSize.sm))
+                    .foregroundStyle(AppTheme.Accent.primary)
+                    .frame(width: AppTheme.IconSize.md, height: AppTheme.IconSize.md)
+
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.xxs) {
+                    Text(account.email)
+                        .font(.system(size: AppTheme.FontSize.smMd, weight: .medium))
+                        .foregroundStyle(AppTheme.Text.primaryColor)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(roleLabel(account))
+                        .font(.system(size: AppTheme.FontSize.xs, weight: .semibold))
+                        .foregroundStyle(AppTheme.Text.tertiaryColor)
+                }
+                Spacer(minLength: 0)
+                Button(action: { mailbox.signOut() }) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: AppTheme.FontSize.smMd))
+                        .foregroundStyle(AppTheme.Text.secondaryColor)
+                        .frame(width: AppTheme.IconSize.md, height: AppTheme.IconSize.md)
+                        .hoverHighlight(cornerRadius: AppTheme.Radius.sm)
+                }
+                .buttonStyle(.plain)
+                .help("Sign out of HoTF")
+            }
+            .padding(.horizontal, AppTheme.Spacing.smMd)
+            .padding(.vertical, AppTheme.Spacing.sm)
+        } else {
+            SidebarRowButton(
+                label: mailbox.isWorking ? "Signing in…" : "Sign in",
+                systemImage: "person.crop.circle",
+                action: onSignInTap
+            )
+        }
+    }
+
+    private func roleLabel(_ account: HoTFAccount) -> String {
+        if account.isMasterAdmin { return "MASTER ADMIN" }
+        if account.isTeam { return "TEAM" }
+        return account.activeStatus.uppercased()
     }
 }
 

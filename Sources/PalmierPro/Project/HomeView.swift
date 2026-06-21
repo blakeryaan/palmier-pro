@@ -1,15 +1,22 @@
 import SwiftUI
 
+enum HomeSection: Hashable {
+    case projects
+    case templates
+    case renderQueue
+}
+
 struct HomeView: View {
     private let columns = [
         GridItem(.adaptive(minimum: 140, maximum: 170), spacing: AppTheme.Spacing.xl)
     ]
 
     @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
+    @State private var section: HomeSection = .projects
 
     var body: some View {
         HStack(spacing: 0) {
-            HomeSidebar()
+            HomeSidebar(section: $section)
                 .frame(width: 220)
 
             content
@@ -27,7 +34,16 @@ struct HomeView: View {
         }
     }
 
+    @ViewBuilder
     private var content: some View {
+        switch section {
+        case .projects: HoTFProjectsView()
+        case .templates: HoTFFormatTemplatesView()
+        case .renderQueue: HoTFRenderQueueView()
+        }
+    }
+
+    private var projectsContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             SampleProjectsStrip()
@@ -150,22 +166,35 @@ private struct WelcomeTitle: View {
 }
 
 private struct HomeSidebar: View {
-    @Bindable private var account = AccountService.shared
+    @Binding var section: HomeSection
+    @State private var mailbox = HoTFMailbox.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if account.isSignedIn {
-                IdentityStrip()
-            }
-
             VStack(alignment: .leading, spacing: 2) {
-                if !account.isSignedIn && !account.isMisconfigured {
-                    SidebarRowButton(
-                        label: "Sign in with Google",
-                        systemImage: "person.crop.circle",
-                        action: { Task { await account.signInWithGoogle() } }
-                    )
-                }
+                SidebarRowButton(
+                    label: "Projects",
+                    systemImage: "square.grid.2x2",
+                    isSelected: section == .projects,
+                    action: { section = .projects }
+                )
+                SidebarRowButton(
+                    label: "Templates",
+                    systemImage: "square.stack.3d.up",
+                    isSelected: section == .templates,
+                    action: { section = .templates }
+                )
+                SidebarRowButton(
+                    label: "Render Queue",
+                    systemImage: "tray.full",
+                    isSelected: section == .renderQueue,
+                    action: { section = .renderQueue }
+                )
+
+                Divider()
+                    .opacity(AppTheme.Opacity.muted)
+                    .padding(.vertical, AppTheme.Spacing.sm)
+
                 SidebarRowButton(
                     label: "New Project",
                     systemImage: "plus",
@@ -181,6 +210,12 @@ private struct HomeSidebar: View {
             .padding(.vertical, 10)
 
             Spacer(minLength: 0)
+
+            Divider().opacity(AppTheme.Opacity.muted)
+
+            HoTFAccountFooter(onSignInTap: { section = .templates })
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
 
             SidebarRowButton(
                 label: "Settings",
