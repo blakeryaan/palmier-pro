@@ -33,23 +33,23 @@ if [ -f "$ROOT/$ENV_FILE" ]; then
   set +a
 fi
 
-SIGNING_IDENTITY="${SIGNING_IDENTITY:-Developer ID Application: Palmier, Inc. (MMFLRC7562)}"
-NOTARY_PROFILE="${NOTARY_PROFILE:-palmier-notary}"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:-Developer ID Application: HoTFEditor, Inc. (MMFLRC7562)}"
+NOTARY_PROFILE="${NOTARY_PROFILE:-hotfeditor-notary}"
 SENTRY_DSN="${SENTRY_DSN:-}"
-RESOURCES="$ROOT/Sources/PalmierPro/Resources"
-APP="$ROOT/.build/PalmierPro.app"
-ZIP="$ROOT/.build/PalmierPro.zip"
-DMG="$ROOT/.build/PalmierPro.dmg"
+RESOURCES="$ROOT/Sources/HoTFEditor/Resources"
+APP="$ROOT/.build/HoTFEditor.app"
+ZIP="$ROOT/.build/HoTFEditor.zip"
+DMG="$ROOT/.build/HoTFEditor.dmg"
 
 echo "==> Building ($CONFIG)"
 swift build -c "$CONFIG"
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/PalmierPro"
+BIN="$(swift build -c "$CONFIG" --show-bin-path)/HoTFEditor"
 SPARKLE_FW="$ROOT/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 
 echo "==> Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
-cp "$BIN" "$APP/Contents/MacOS/PalmierPro"
+cp "$BIN" "$APP/Contents/MacOS/HoTFEditor"
 cp "$RESOURCES/Info.plist" "$APP/Contents/Info.plist"
 
 if [ -n "$SENTRY_DSN" ]; then
@@ -71,31 +71,31 @@ inject_plist() {
 }
 
 echo "==> Injecting backend config into Info.plist"
-inject_plist PalmierClerkPublishableKey "${CLERK_PUBLISHABLE_KEY:-}"
-inject_plist PalmierConvexDeploymentURL "${CONVEX_DEPLOYMENT_URL:-}"
-inject_plist PalmierConvexHttpURL "${CONVEX_HTTP_URL:-}"
+inject_plist HoTFEditorClerkPublishableKey "${CLERK_PUBLISHABLE_KEY:-}"
+inject_plist HoTFEditorConvexDeploymentURL "${CONVEX_DEPLOYMENT_URL:-}"
+inject_plist HoTFEditorConvexHttpURL "${CONVEX_HTTP_URL:-}"
 cp "$RESOURCES/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cp -R "$SPARKLE_FW" "$APP/Contents/Frameworks/Sparkle.framework"
 
 # Flatten SwiftPM's resource bundle into the app's Resources tree.
-RES_BUNDLE="$(dirname "$BIN")/PalmierPro_PalmierPro.bundle"
+RES_BUNDLE="$(dirname "$BIN")/HoTFEditor_HoTFEditor.bundle"
 if [ -d "$RES_BUNDLE/Fonts" ]; then
   cp -R "$RES_BUNDLE/Fonts" "$APP/Contents/Resources/"
 else
   echo "!! missing Fonts/ in SwiftPM resource bundle at $RES_BUNDLE" >&2
   exit 1
 fi
-if [ -f "$RES_BUNDLE/palmier-pro.mcpb" ]; then
-  cp "$RES_BUNDLE/palmier-pro.mcpb" "$APP/Contents/Resources/"
+if [ -f "$RES_BUNDLE/hotf-editor.mcpb" ]; then
+  cp "$RES_BUNDLE/hotf-editor.mcpb" "$APP/Contents/Resources/"
 else
-  echo "!! missing palmier-pro.mcpb in SwiftPM resource bundle at $RES_BUNDLE" >&2
+  echo "!! missing hotf-editor.mcpb in SwiftPM resource bundle at $RES_BUNDLE" >&2
   exit 1
 fi
 if [ -d "$RES_BUNDLE/Images" ]; then
   cp -R "$RES_BUNDLE/Images" "$APP/Contents/Resources/"
 fi
 
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/PalmierPro"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/HoTFEditor"
 touch "$APP"
 
 if [ "$MODE" = "fast" ]; then
@@ -105,10 +105,10 @@ if [ "$MODE" = "fast" ]; then
   exit 0
 fi
 
-DSYM="$ROOT/.build/PalmierPro.dSYM"
+DSYM="$ROOT/.build/HoTFEditor.dSYM"
 echo "==> Generating dSYM"
 rm -rf "$DSYM"
-dsymutil "$APP/Contents/MacOS/PalmierPro" -o "$DSYM"
+dsymutil "$APP/Contents/MacOS/HoTFEditor" -o "$DSYM"
 
 upload_dsyms() {
   if [ -z "${SENTRY_AUTH_TOKEN:-}" ] || [ -z "${SENTRY_ORG:-}" ] || [ -z "${SENTRY_PROJECT:-}" ]; then
@@ -177,11 +177,11 @@ rm -f "$ZIP"
 echo "==> Building DMG"
 rm -f "$DMG"
 STAGING="$(mktemp -d)"
-cp -R "$APP" "$STAGING/PalmierPro.app"
+cp -R "$APP" "$STAGING/HoTFEditor.app"
 ln -s /Applications "$STAGING/Applications"
 cp "$RESOURCES/AppIcon.icns" "$STAGING/.VolumeIcon.icns"
 hdiutil create \
-  -volname "PalmierPro" \
+  -volname "HoTFEditor" \
   -srcfolder "$STAGING" \
   -ov -format UDZO \
   "$DMG"

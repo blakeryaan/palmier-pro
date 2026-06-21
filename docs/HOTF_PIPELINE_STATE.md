@@ -7,7 +7,7 @@
 
 ## TL;DR
 
-- The macOS editor (Palmier Pro, this repo) now signs in with a HoTF account and shows three tabs: **Projects**, **Templates**, **Render Queue**, all read from a **Supabase mirror** on the **Portal** project.
+- The macOS editor (HoTF Editor, this repo) now signs in with a HoTF account and shows three tabs: **Projects**, **Templates**, **Render Queue**, all read from a **Supabase mirror** on the **Portal** project.
 - A Reeve script (`npm run sync-notion`) mirrors the Reeve content-workbench Notion DBs **and** `mode_c_variations` into that Supabase. Meant to run on a cron.
 - **The editor only understands Mode C** (`ModeCReel`: template + resolution + b-roll slots). It opens a project by downloading the b-roll/audio from public Drive/Supabase URLs baked into the recipe.
 - **The gap Blake noticed:** Projects shows only 16 old Future-Fulfilment Mode C variations. The recent Noah/Blake work is **not Mode C** — it's `TrialReel` and `ClientReel` compositions in `render_jobs`, which the editor can't open. See **§5**.
@@ -61,7 +61,7 @@ Each `wb_projects` row carries a **media_manifest**: `assetId → { proxyUrl, fu
 - b-roll → Google Drive `/file/d/<id>/view` links
 - audio → public Supabase storage (`…/storage/v1/object/public/mode-c-audio/…m4a`)
 
-On **Open**, `Sources/PalmierPro/HoTF/HoTFJobImporter.swift`:
+On **Open**, `Sources/HoTFEditor/HoTF/HoTFJobImporter.swift`:
 1. Rewrites Drive `/view` URLs → direct-download (`uc?export=download&id=…`).
 2. Downloads each asset over HTTPS into the local project's media folder.
 3. Builds the timeline (video/text/audio tracks) from the recipe segments.
@@ -99,7 +99,7 @@ Reeve `render_jobs` (502 rows = the real render history) splits into **three com
 
 - `scripts/sync-notion-to-supabase.ts` (`npm run sync-notion`) — the cron.
 - `scripts/migrate-templates-to-portal.ts` (`npm run migrate-templates`) — earlier, superseded.
-- `workbench/` — added a **"Send to Palmier"** action (`/api/push-to-editor` → `pushToEditor`) so a reviewed variation can be pushed to `editor_jobs`.
+- `workbench/` — added a **"Send to HoTF Editor"** action (`/api/push-to-editor` → `pushToEditor`) so a reviewed variation can be pushed to `editor_jobs`.
 
 ---
 

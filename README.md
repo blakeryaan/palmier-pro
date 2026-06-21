@@ -1,29 +1,29 @@
 <div align="center">
 
-# Palmier Pro
+# HoTF Editor
 
 **The video editor built for AI.**
 
-<a href="https://github.com/palmier-io/palmier-pro/releases/latest/download/PalmierPro.dmg">
-  <img src="./assets/macos-badge.png" alt="Download palmierpro for macOS" width="180" />
+<a href="https://github.com/thehotf/hotf-editor/releases/latest/download/HoTFEditor.dmg">
+  <img src="./assets/macos-badge.png" alt="Download hotfeditorpro for macOS" width="180" />
 </a>
 
 <sub><i>Requires macOS 26 (Tahoe) on Apple Silicon</i></sub>
 
-<a href="https://x.com/Palmier_io"><img src="https://img.shields.io/badge/Follow-%40palmierio-000000?style=flat&logo=x&logoColor=white" alt="Follow on X" /></a>
+<a href="https://x.com/HoTFEditor_io"><img src="https://img.shields.io/badge/Follow-%40hotfeditorio-000000?style=flat&logo=x&logoColor=white" alt="Follow on X" /></a>
 <a href="https://discord.com/invite/SMVW6pKYmg"><img src="https://img.shields.io/badge/Join-Discord-5865F2?style=flat&logo=discord&logoColor=white" alt="Join Discord" /></a>
 
 </div>
 
-<img src="./assets/palmier-ui.png" alt="palmierpro UI" width="900" />
+<img src="./assets/hotf-editor-ui.png" alt="hotfeditorpro UI" width="900" />
 
 ---
 
-Palmier Pro is an open source video editor for Mac. You and your agent can generate and edit videos together inside the timeline.
+HoTF Editor is an open source video editor for Mac. You and your agent can generate and edit videos together inside the timeline.
 
 ### Swift-native video editor
 
-We built Palmier Pro from scratch with Swift. The north star is Premiere Pro, with our take on integrating AI into the workflow.
+We built HoTF Editor from scratch with Swift. The north star is Premiere Pro, with our take on integrating AI into the workflow.
 
 ### Built-in Generative AI
 
@@ -39,12 +39,12 @@ When the app is open, it exposes an MCP server at `http://127.0.0.1:19789/mcp` v
 
 **Claude Code**
 ```bash
-claude mcp add --transport http palmier-pro http://127.0.0.1:19789/mcp
+claude mcp add --transport http hotf-editor http://127.0.0.1:19789/mcp
 ```
 
 **Codex**
 ```bash
-codex mcp add palmier-pro --url http://127.0.0.1:19789/mcp
+codex mcp add hotf-editor --url http://127.0.0.1:19789/mcp
 ```
 
 **Cursor**
@@ -54,7 +54,7 @@ The easiest way is go inside the app `Help` -> `MCP Instructions` -> `Install in
 ```
 {
   "mcpServers": {
-    "palmier-pro": {
+    "hotf-editor": {
       "type": "http",
       "url": "http://127.0.0.1:19789/mcp"
     }
@@ -68,7 +68,7 @@ We bundle a [mcpb](https://github.com/modelcontextprotocol/mcpb) with the app th
 
 ## FAQ
 
-**Is Palmier Pro fully open source?**
+**Is HoTF Editor fully open source?**
 
 The video editor (without the generative AI features) is fully open source. The MCP server and the agent chat are also open source. The only thing that is closed source is the generative AI processing.
 
@@ -90,6 +90,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 
-Copyright (C) 2026 Palmier, Inc.
+Copyright (C) 2026 HoTF Editor, Inc.
 
-Palmier Pro is open source under [GPLv3](LICENSE).
+HoTF Editor is open source under [GPLv3](LICENSE).

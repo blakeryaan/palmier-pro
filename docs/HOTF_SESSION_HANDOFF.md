@@ -50,7 +50,7 @@ IDs/creds, and exactly what's left. Where this doc and the older
      Remotion render → Frame.io → `done` → Notion) + `scripts/push-to-editor.ts`.
    - `editor_jobs` table live on prod, schema matches the contract.
    - Seeded a **real** test job into the prod mailbox (below).
-   - Launched the editor (`swift run PalmierPro`) for live testing.
+   - Launched the editor (`swift run HoTFEditor`) for live testing.
 
 4. **Wrote the build plan** → `HOTF_EDITOR_SYNC_PLAN.md` (the 3 tracks).
 
@@ -103,7 +103,7 @@ master-admin emails are currently "team".** Real team members need `team-invite`
 
 ## Test the loop right now (editor half — no agent box needed)
 
-1. App is running (`swift run PalmierPro`). **⌘⇧J** → HoTF Jobs.
+1. App is running (`swift run HoTFEditor`). **⌘⇧J** → HoTF Jobs.
 2. Connect: Portal `https://clients.thehotf.com` · Supabase
    `https://xxtuqjtwspjcbwvqdfof.supabase.co` · service key (portal `.env.local`) ·
    token = your `cp_at` cookie value. → resolves you as TEAM.

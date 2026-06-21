@@ -43,7 +43,7 @@ two machines with zero coordination.
 ## 2. Current state (built + verified 2026-06-20)
 
 - ✅ Editor compiles (`swift build` clean). HoTF integration present:
-  `Sources/PalmierPro/HoTF/` — `HoTFMailbox` (list/claim/saveDialed),
+  `Sources/HoTFEditor/HoTF/` — `HoTFMailbox` (list/claim/saveDialed),
   `HoTFJobImporter` (recipe ⇄ timeline), `HoTFJobsView` (⌘⇧J window),
   `HoTFContracts`, `HoTFConfig`.
 - ✅ Reeve side built: `src/engine/editor-jobs.ts` (push/claim/update) +
@@ -59,7 +59,7 @@ the Supabase service key, and it doesn't prompt on launch. We replace that with 
 real account login (Track A). Media proxies (real footage preview in-editor) are
 a separate, later optimisation — structure/dial/save/render all work without them.
 
-> Note: the editor's *native* `AccountService` is Clerk+Convex — that's Palmier's
+> Note: the editor's *native* `AccountService` is Clerk+Convex — that's HoTF Editor's
 > commercial backend for AI credits, **dormant in this fork**. The HoTF login is a
 > separate, additional sign-in. Don't touch the Clerk path.
 

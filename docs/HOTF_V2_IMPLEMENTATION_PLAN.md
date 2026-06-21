@@ -11,7 +11,7 @@ Reeve `feat/editor-mailbox`, editor `feat/hotf-mailbox` pushed).
 - **T4 Reeve** ✅ `editor-jobs.ts` (pushToEditor/claim/editorJobToVariation) + `mode-c-worker.ts`
   approved→render→Frame.io→done→Notion step. Verified: live `editor_jobs` push→approve→claim
   (optimistic lock)→done; `tsc` clean.
-- **T3 Editor** ✅ `Sources/PalmierPro/HoTF/*` (contracts, identity, mailbox, recipe↔timeline, Jobs
+- **T3 Editor** ✅ `Sources/HoTFEditor/HoTF/*` (contracts, identity, mailbox, recipe↔timeline, Jobs
   window, ⌘⇧J). Verified: `swift build` + `HoTFContractTests` 3/3 + cross-language dialed→render-props.
 - **T2 MCP** ✅ `get_performance` / `ideate` / `draft` / `save_to_library` + portal
   `/api/identity/{performance,save}`. MCP boots (7 tools); portal `tsc` 0 new errors.
@@ -37,7 +37,7 @@ One foundation, three products on top, plus the production engine:
 - **Foundation — HoTF login + account status** (Supabase Auth, project `xxtuqjtwspjcbwvqdfof`) + **content engine** (Notion + Supabase). One account per person, for clients AND team. The login is the front door; the account carries active/paid status.
 - **Dashboard V2** (`clients` repo, `v2`, Next.js 16) — the ecosystem / client front door + team admin + the remote-control surface for production.
 - **MCP connector** (`scheduler` repo) — the client's context in their Claude. Paid, gated on active status. No link to the editor.
-- **Video Editor** (`palmier-pro` / Palmier Pro, Swift) — internal production surface. Agent drafts ~90%, human dials, render fleet ships.
+- **Video Editor** (`hotf-editor` / HoTF Editor, Swift) — internal production surface. Agent drafts ~90%, human dials, render fleet ships.
 - **Reeve = Trial Reel Engine** (`trial-reel-generator`, Remotion) — the content automation OS (Mode A/B/C/D, render workers, queues). Produces the Mode C recipes the editor dials.
 
 **Production flow:** Reeve drafts a Mode C recipe → editor opens it as a timeline, human dials → saves back → Reeve's render worker (Remotion, render laptop) ships → Frame.io → portal review. The MCP is separate (client context, not the render loop). The only thing all share is the **login**.
@@ -84,9 +84,9 @@ The team-admin code already exists and is correct.
 - ✅ `src/mcp/SETUP.md`, `package.json` (+ `@modelcontextprotocol/sdk`, `zod`, `@types/node`), `tsconfig` now includes `src/`. Server typechecks clean.
 - ⬜ Left: `get_performance` (IG analytics DB), `draft`/`ideate` (always voice), `save_to_library`; OAuth instead of a pasted token; remote HTTP transport + Railway deploy (so clients add a URL, not run a process).
 
-## Track 3 — Editor: integrate Palmier Pro 🟡 (contract done; Swift impl left)
+## Track 3 — Editor: integrate HoTF Editor 🟡 (contract done; Swift impl left)
 
-Palmier Pro is a full Swift AI editor that already exposes an MCP server + has Timeline/MediaManifest/MediaResolver/agent-tools. The work is HoTF-specific wiring.
+HoTF Editor is a full Swift AI editor that already exposes an MCP server + has Timeline/MediaManifest/MediaResolver/agent-tools. The work is HoTF-specific wiring.
 
 - ✅ Integration substrate done (see Track 3+4 below).
 - ⬜ Build against `Video Editor/docs/REEVE_MAILBOX_CONTRACT.md`:

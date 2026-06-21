@@ -8,8 +8,8 @@
 ## Develop
 
 ```bash
-git clone https://github.com/palmier-io/palmier-pro
-cd palmier-pro
+git clone https://github.com/thehotf/hotf-editor
+cd hotf-editor
 
 swift build
 swift run

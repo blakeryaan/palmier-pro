@@ -3,10 +3,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "PalmierPro",
+    name: "HoTFEditor",
     platforms: [.macOS(.v26)],
     products: [
-        .executable(name: "PalmierPro", targets: ["PalmierPro"]),
+        .executable(name: "HoTFEditor", targets: ["HoTFEditor"]),
     ],
     dependencies: [
         .package(url: "https://github.com/dmrschmidt/DSWaveformImage", from: "14.2.2"),
@@ -21,7 +21,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "PalmierPro",
+            name: "HoTFEditor",
             dependencies: [
                 .product(name: "DSWaveformImage", package: "DSWaveformImage"),
                 .product(name: "MCP", package: "swift-sdk"),
@@ -33,7 +33,7 @@ let package = Package(
                 .product(name: "Tokenizers", package: "swift-transformers"),
                 .product(name: "Lottie", package: "lottie-ios"),
             ],
-            path: "Sources/PalmierPro",
+            path: "Sources/HoTFEditor",
             exclude: [
                 "Resources/Info.plist",
                 "Resources/AppIcon.icon",
@@ -42,14 +42,14 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/Fonts"),
-                .copy("Resources/MCPB/palmier-pro.mcpb"),
+                .copy("Resources/MCPB/hotf-editor.mcpb"),
                 .copy("Resources/Images"),
             ]
         ),
         .testTarget(
-            name: "PalmierProTests",
-            dependencies: ["PalmierPro"],
-            path: "Tests/PalmierProTests"
+            name: "HoTFEditorTests",
+            dependencies: ["HoTFEditor"],
+            path: "Tests/HoTFEditorTests"
         ),
     ]
 )

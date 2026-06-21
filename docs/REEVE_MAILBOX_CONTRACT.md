@@ -1,6 +1,6 @@
 # Editor ↔ Reeve — Supabase mailbox contract
 
-Palmier Pro (this editor) and Reeve (Trial Reel Engine) integrate through ONE Supabase table: `editor_jobs` (project `xxtuqjtwspjcbwvqdfof`, migration applied 2026-06-20). No machine talks to another directly — each reads/writes the row. This is the "mailbox" from the Video Editor scope.
+HoTF Editor (this editor) and Reeve (Trial Reel Engine) integrate through ONE Supabase table: `editor_jobs` (project `xxtuqjtwspjcbwvqdfof`, migration applied 2026-06-20). No machine talks to another directly — each reads/writes the row. This is the "mailbox" from the Video Editor scope.
 
 ## Table: `editor_jobs`
 | column | meaning |
@@ -30,7 +30,7 @@ RLS is on with no policies = service-role only (editor + Reeve use the service k
 - `hookText` → the `{{hook}}` literal.
 - **Save-back:** serialize dialed timeline → `dialed` recipe (segment timings/text/framing/speed). Richer edits Remotion can't represent (motion/keyframes) are dropped — the "one seam" from the scope. Acceptable for v1 (hand-dial timing/text/framing).
 
-## Editor build (T3) — add to Palmier Pro
+## Editor build (T3) — add to HoTF Editor
 - A Supabase client module (service key or a scoped token).
 - HoTF login: reuse the shared identity — call the portal `GET /api/identity/resolve` (Bearer), team-gated, surfaced in `Settings/AccountPane.swift`.
 - A "HoTF Jobs" panel: list `editor_jobs` `ready`/`open` for the signed-in team member → open → map `recipe` to a `VideoProject`/`Timeline` (`Models/Timeline.swift`, `Project/VideoProject.swift`).
